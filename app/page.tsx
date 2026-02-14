@@ -426,7 +426,7 @@ export default function Home() {
                         fontSize: "13px",
                       }}
                       formatter={(value: number | undefined) => [value ?? 0, "검색 비율"]}
-                      labelFormatter={(label: string) => `${label}`}
+                      labelFormatter={(label) => `${label}`}
                     />
                     <Line
                       type="monotone"
