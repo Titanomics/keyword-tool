@@ -133,7 +133,7 @@ export default function Home() {
     <div className="min-h-screen bg-gray-50 py-10 px-4">
       <div className="max-w-5xl mx-auto">
         <h1 className="text-3xl font-bold text-center text-gray-800 mb-2">
-          네이버 검색량 조회
+          기린컴퍼니 전용 네이버 검색량 조회
         </h1>
         <p className="text-center text-gray-500 mb-8">
           키워드를 입력하면 연관 키워드의 월간 검색량과 경쟁강도를 조회합니다
