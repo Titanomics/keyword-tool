@@ -2,12 +2,26 @@
 
 import { useState } from "react";
 import * as XLSX from "xlsx";
+import {
+  LineChart,
+  Line,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  ResponsiveContainer,
+} from "recharts";
 
 interface KeywordResult {
   relKeyword: string;
   monthlyPcQcCnt: number | string;
   monthlyMobileQcCnt: number | string;
   compIdx: string;
+}
+
+interface TrendData {
+  period: string;
+  ratio: number;
 }
 
 type SortKey = "pc" | "mobile" | "total" | null;
@@ -24,6 +38,11 @@ export default function Home() {
   const [error, setError] = useState("");
   const [sortKey, setSortKey] = useState<SortKey>(null);
   const [filterByKeyword, setFilterByKeyword] = useState(true);
+
+  const [trendKeyword, setTrendKeyword] = useState("");
+  const [trendData, setTrendData] = useState<TrendData[]>([]);
+  const [trendLoading, setTrendLoading] = useState(false);
+  const [trendError, setTrendError] = useState("");
 
   const handleSearch = async () => {
     if (!keyword.trim()) return;
@@ -85,9 +104,17 @@ export default function Home() {
   const sortedResults = (() => {
     if (!sortKey) return filteredResults;
     return [...filteredResults].sort((a, b) => {
-      if (sortKey === "pc") return toNumber(b.monthlyPcQcCnt) - toNumber(a.monthlyPcQcCnt);
-      if (sortKey === "mobile") return toNumber(b.monthlyMobileQcCnt) - toNumber(a.monthlyMobileQcCnt);
-      return (toNumber(b.monthlyPcQcCnt) + toNumber(b.monthlyMobileQcCnt)) - (toNumber(a.monthlyPcQcCnt) + toNumber(a.monthlyMobileQcCnt));
+      if (sortKey === "pc")
+        return toNumber(b.monthlyPcQcCnt) - toNumber(a.monthlyPcQcCnt);
+      if (sortKey === "mobile")
+        return (
+          toNumber(b.monthlyMobileQcCnt) - toNumber(a.monthlyMobileQcCnt)
+        );
+      return (
+        toNumber(b.monthlyPcQcCnt) +
+        toNumber(b.monthlyMobileQcCnt) -
+        (toNumber(a.monthlyPcQcCnt) + toNumber(a.monthlyMobileQcCnt))
+      );
     });
   })();
 
@@ -106,7 +133,8 @@ export default function Home() {
       키워드: item.relKeyword,
       "월간 PC 검색량": item.monthlyPcQcCnt,
       "월간 모바일 검색량": item.monthlyMobileQcCnt,
-      "총 검색량": toNumber(item.monthlyPcQcCnt) + toNumber(item.monthlyMobileQcCnt),
+      "총 검색량":
+        toNumber(item.monthlyPcQcCnt) + toNumber(item.monthlyMobileQcCnt),
       경쟁강도: formatCompIdx(item.compIdx),
     }));
 
@@ -127,6 +155,46 @@ export default function Home() {
       wb,
       `네이버_검색량_${keyword}_${new Date().toISOString().slice(0, 10)}.xlsx`
     );
+  };
+
+  const handleKeywordClick = async (kw: string) => {
+    setTrendKeyword(kw);
+    setTrendData([]);
+    setTrendLoading(true);
+    setTrendError("");
+
+    try {
+      const res = await fetch(
+        `/api/trend?keyword=${encodeURIComponent(kw)}`
+      );
+      const data = await res.json();
+
+      if (!res.ok) {
+        setTrendError(data.error || "트렌드 조회에 실패했습니다.");
+        return;
+      }
+
+      if (data.results?.[0]?.data) {
+        setTrendData(
+          data.results[0].data.map((d: { period: string; ratio: number }) => ({
+            period: d.period.slice(0, 7),
+            ratio: d.ratio,
+          }))
+        );
+      } else {
+        setTrendError("트렌드 데이터가 없습니다.");
+      }
+    } catch {
+      setTrendError("네트워크 오류가 발생했습니다.");
+    } finally {
+      setTrendLoading(false);
+    }
+  };
+
+  const closeTrendModal = () => {
+    setTrendKeyword("");
+    setTrendData([]);
+    setTrendError("");
   };
 
   return (
@@ -172,11 +240,12 @@ export default function Home() {
               <div className="flex items-center gap-4">
                 <span className="text-gray-600">
                   총 <strong>{sortedResults.length}</strong>개 키워드
-                  {filterByKeyword && sortedResults.length !== results.length && (
-                    <span className="text-gray-400 ml-1">
-                      (전체 {results.length}개)
-                    </span>
-                  )}
+                  {filterByKeyword &&
+                    sortedResults.length !== results.length && (
+                      <span className="text-gray-400 ml-1">
+                        (전체 {results.length}개)
+                      </span>
+                    )}
                 </span>
                 <label className="flex items-center gap-2 cursor-pointer select-none">
                   <input
@@ -208,6 +277,10 @@ export default function Home() {
                 엑셀 다운로드
               </button>
             </div>
+
+            <p className="text-xs text-gray-400 mb-2">
+              * 키워드를 클릭하면 최근 1년 검색 트렌드를 확인할 수 있습니다
+            </p>
 
             <div className="overflow-x-auto bg-white rounded-lg shadow">
               <table className="w-full">
@@ -251,8 +324,13 @@ export default function Home() {
                       <td className="px-4 py-3 text-sm text-gray-500">
                         {index + 1}
                       </td>
-                      <td className="px-4 py-3 text-sm text-gray-800 font-medium">
-                        {item.relKeyword}
+                      <td className="px-4 py-3 text-sm font-medium">
+                        <button
+                          onClick={() => handleKeywordClick(item.relKeyword)}
+                          className="text-blue-600 hover:text-blue-800 hover:underline cursor-pointer text-left"
+                        >
+                          {item.relKeyword}
+                        </button>
                       </td>
                       <td className="px-4 py-3 text-sm text-gray-700 text-right">
                         {formatNumber(item.monthlyPcQcCnt)}
@@ -261,7 +339,10 @@ export default function Home() {
                         {formatNumber(item.monthlyMobileQcCnt)}
                       </td>
                       <td className="px-4 py-3 text-sm text-gray-800 text-right font-semibold">
-                        {(toNumber(item.monthlyPcQcCnt) + toNumber(item.monthlyMobileQcCnt)).toLocaleString()}
+                        {(
+                          toNumber(item.monthlyPcQcCnt) +
+                          toNumber(item.monthlyMobileQcCnt)
+                        ).toLocaleString()}
                       </td>
                       <td
                         className={`px-4 py-3 text-sm text-center ${getCompIdxColor(item.compIdx)}`}
@@ -284,6 +365,84 @@ export default function Home() {
           </div>
         )}
       </div>
+
+      {/* 트렌드 모달 */}
+      {trendKeyword && (
+        <div
+          className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4"
+          onClick={closeTrendModal}
+        >
+          <div
+            className="bg-white rounded-2xl shadow-xl max-w-2xl w-full p-6"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex justify-between items-center mb-4">
+              <h2 className="text-xl font-bold text-gray-800">
+                &ldquo;{trendKeyword}&rdquo; 검색 트렌드
+              </h2>
+              <button
+                onClick={closeTrendModal}
+                className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-gray-100 text-gray-500 hover:text-gray-700 transition-colors cursor-pointer text-xl"
+              >
+                ✕
+              </button>
+            </div>
+            <p className="text-sm text-gray-400 mb-4">
+              최근 1년간 월별 검색 트렌드 (상대값, 최대 100)
+            </p>
+
+            {trendLoading && (
+              <div className="text-center py-12">
+                <div className="inline-block w-8 h-8 border-4 border-green-500 border-t-transparent rounded-full animate-spin"></div>
+                <p className="mt-3 text-gray-500">트렌드 조회 중...</p>
+              </div>
+            )}
+
+            {trendError && (
+              <div className="p-4 bg-red-50 border border-red-200 rounded-lg text-red-600 text-center">
+                {trendError}
+              </div>
+            )}
+
+            {trendData.length > 0 && (
+              <div className="w-full h-72">
+                <ResponsiveContainer width="100%" height="100%">
+                  <LineChart data={trendData}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                    <XAxis
+                      dataKey="period"
+                      tick={{ fontSize: 12, fill: "#888" }}
+                      tickLine={false}
+                    />
+                    <YAxis
+                      tick={{ fontSize: 12, fill: "#888" }}
+                      tickLine={false}
+                      domain={[0, 100]}
+                    />
+                    <Tooltip
+                      contentStyle={{
+                        borderRadius: "8px",
+                        border: "1px solid #e5e7eb",
+                        fontSize: "13px",
+                      }}
+                      formatter={(value: number) => [value, "검색 비율"]}
+                      labelFormatter={(label: string) => `${label}`}
+                    />
+                    <Line
+                      type="monotone"
+                      dataKey="ratio"
+                      stroke="#22c55e"
+                      strokeWidth={2.5}
+                      dot={{ fill: "#22c55e", r: 4 }}
+                      activeDot={{ r: 6 }}
+                    />
+                  </LineChart>
+                </ResponsiveContainer>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
