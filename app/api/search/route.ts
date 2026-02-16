@@ -26,7 +26,7 @@ export async function GET(request: NextRequest) {
   const signature = generateSignature(timestamp, method, uri);
 
   const apiUrl = new URL("https://api.searchad.naver.com/keywordstool");
-  apiUrl.searchParams.set("hintKeywords", keyword);
+  apiUrl.searchParams.set("hintKeywords", keyword.replace(/\s+/g, ""));
   apiUrl.searchParams.set("showDetail", "1");
 
   try {
